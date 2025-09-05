@@ -1,5 +1,4 @@
 name: Build & Deploy Marp slides
-
 on:
   push:
     branches: [ "main" ]
@@ -20,43 +19,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Java for PlantUML
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      # Graphviz is required for many diagram types
+      # PlantUML (SVG) so images embed nicely
       - name: Install Graphviz & PlantUML
         run: |
           sudo apt-get update
           sudo apt-get install -y graphviz plantuml
-
-      # Render all .puml → SVG (or PNG with -tpng)
-      - name: Render PlantUML
-        run: |
           mkdir -p diagrams
-          plantuml -tsvg diagrams/*.puml
+          plantuml -tsvg diagrams/*.puml || true
 
-      # Build slides (HTML + PDF) via Marp
-      - name: Use Marp CLI action to render
-        uses: KoharaKazuya/marp-cli-action@v1
+      # Marp build (uses .marprc-ci.yml)
+      - name: Convert Markdown into HTML and PDF
+        uses: KoharaKazuya/marp-cli-action@v4
         with:
-          input: slides.md
-          allowLocalFiles: true
-          html: true
-          pdf: true
-          output: dist/slides
+          config-file: ./.marprc-ci.yml
+          generate-html: true
+          generate-pdf: true
 
-      # Make index for Pages
+      # Ensure diagrams are published with the HTML
       - name: Prepare site
         run: |
-          mkdir -p dist
-          # Ensure an index.html exists (point to slides.html)
-          if [ ! -f dist/index.html ]; then
-            echo '<meta http-equiv="refresh" content="0; url=slides.html">' > dist/index.html
-          fi
+          mkdir -p dist/diagrams
+          cp diagrams/*.svg dist/diagrams/ 2>/dev/null || true
+          # Make index.html the slides
+          if [ -f dist/slides.html ]; then cp dist/slides.html dist/index.html; fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
