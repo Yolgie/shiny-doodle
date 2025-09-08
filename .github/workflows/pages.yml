@@ -26,28 +26,61 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y graphviz plantuml
 
-      # Render UML to SVG (safe if none exist)
+      # Render UML to SVG (safe if no .puml files)
       - name: Render PlantUML
         run: |
           mkdir -p diagrams
           plantuml -tsvg diagrams/*.puml || true
 
-      # Marp build -> build/  (use args to avoid config surprises)
-      - name: Build slides with Marp
+      # Ensure build dir exists
+      - name: Prepare build dir
+        run: mkdir -p build
+
+      # Build HTML with Marp (explicit output file)
+      - name: Build HTML slide deck
         uses: KoharaKazuya/marp-cli-action@v4
         with:
           args: >-
             slides.md
             --allow-local-files
             --html
+            -o build/slides.html
+
+      # Build PDF with Marp (explicit output file)
+      - name: Build PDF slide deck
+        uses: KoharaKazuya/marp-cli-action@v4
+        with:
+          args: >-
+            slides.md
+            --allow-local-files
             --pdf
-            -o build/
+            -o build/slides.pdf
+
+      # (Optional) Inspect outputs for debugging
+      - name: List build outputs
+        run: ls -laR build || true
 
       # Assemble publishable site in site/
       - name: Prepare site
         run: |
           rm -rf site
           mkdir -p site/diagrams
-          cp -r build/* site/ || true
-          cp diagrams/*.svg site/diagrams/ 2>/dev/null || true
-          [ -f site/sli]()
+          if [ -d build ]; then cp -r build/. site/; fi
+          if ls diagrams/*.svg >/dev/null 2>&1; then cp diagrams/*.svg site/diagrams/; fi
+          if [ -f site/slides.html ]; then cp site/slides.html site/index.html; fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
