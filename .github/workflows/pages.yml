@@ -5,6 +5,11 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+env:
+  # CHANGE THIS if your deck isn't at repo root:
+  # e.g. docs/slides.md or presentations/mytalk.md
+  SLIDES_PATH: slides.md
+
 permissions:
   contents: read
   pages: write
@@ -20,61 +25,75 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Prepare output dirs
-      - run: mkdir -p build site diagrams
+      - name: Show repo tree (debug)
+        run: |
+          echo "Repo root:"
+          ls -la
+          echo
+          echo "docs/:"
+          ls -la docs || true
+          echo
+          echo "presentations/:"
+          ls -la presentations || true
 
-      # PlantUML + Graphviz
+      - name: Verify slide source exists
+        run: |
+          if [ ! -f "$SLIDES_PATH" ]; then
+            echo "::error ::SLIDES_PATH='$SLIDES_PATH' not found. Set env SLIDES_PATH to your Markdown file (e.g. docs/slides.md)."
+            exit 1
+          fi
+
+      # Optional UML rendering (safe no-op if no *.puml)
       - name: Install Graphviz & PlantUML
         run: |
           sudo apt-get update
           sudo apt-get install -y graphviz plantuml
+      - name: Render PlantUML to SVG
+        run: |
+          mkdir -p diagrams
+          plantuml -tsvg diagrams/*.puml || true
 
-      # Render UML to SVG (no-op if none exist)
-      - name: Render PlantUML
-        run: plantuml -tsvg diagrams/*.puml || true
+      - name: Ensure build dir
+        run: mkdir -p build
 
-      # Build HTML
-      - name: Build HTML deck
+      - name: Build HTML with Marp
         uses: KoharaKazuya/marp-cli-action@v4
         with:
           args: >-
-            slides.md
+            ${{ env.SLIDES_PATH }}
             --allow-local-files
             --html
             -o build/slides.html
 
-      # Build PDF
-      - name: Build PDF deck
+      - name: Build PDF with Marp
         uses: KoharaKazuya/marp-cli-action@v4
         with:
           args: >-
-            slides.md
+            ${{ env.SLIDES_PATH }}
             --allow-local-files
             --pdf
             -o build/slides.pdf
 
-      # Assemble site/ for Pages
+      - name: List build outputs (debug)
+        run: ls -la build || true
+
       - name: Prepare site
         run: |
-          cp -r build/. site/ || true
-          if ls diagrams/*.svg >/dev/null 2>&1; then
-            mkdir -p site/diagrams
-            cp diagrams/*.svg site/diagrams/
-          fi
-          # Make index.html
-          if [ -f site/slides.html ]; then
-            cp site/slides.html site/index.html
-          else
-            echo '<h1>No slides.html found</h1>' > site/index.html
-          fi
-          echo "Contents of site/:"
-          ls -la site
+          mkdir -p site/diagrams
+          cp -r build/. site/
+          if ls diagrams/*.svg >/dev/null 2>&1; then cp diagrams/*.svg site/diagrams/; fi
+          cp site/slides.html site/index.html
 
-      # Configure GitHub Pages (sets up the deployment)
+      - name: Sanity check site/
+        run: |
+          echo "site/:"
+          ls -la site
+          test -f site/index.html
+          test -f site/slides.pdf
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      # Upload artifact for Pages
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
