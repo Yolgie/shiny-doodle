@@ -20,24 +20,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Prepare output dirs
+      - run: mkdir -p build site diagrams
+
       # PlantUML + Graphviz
       - name: Install Graphviz & PlantUML
         run: |
           sudo apt-get update
           sudo apt-get install -y graphviz plantuml
 
-      # Render UML to SVG (safe if no .puml files)
+      # Render UML to SVG (no-op if none exist)
       - name: Render PlantUML
-        run: |
-          mkdir -p diagrams
-          plantuml -tsvg diagrams/*.puml || true
+        run: plantuml -tsvg diagrams/*.puml || true
 
-      # Ensure build dir exists
-      - name: Prepare build dir
-        run: mkdir -p build
-
-      # Build HTML with Marp (explicit output file)
-      - name: Build HTML slide deck
+      # Build HTML
+      - name: Build HTML deck
         uses: KoharaKazuya/marp-cli-action@v4
         with:
           args: >-
@@ -46,8 +43,8 @@ jobs:
             --html
             -o build/slides.html
 
-      # Build PDF with Marp (explicit output file)
-      - name: Build PDF slide deck
+      # Build PDF
+      - name: Build PDF deck
         uses: KoharaKazuya/marp-cli-action@v4
         with:
           args: >-
@@ -56,19 +53,28 @@ jobs:
             --pdf
             -o build/slides.pdf
 
-      # (Optional) Inspect outputs for debugging
-      - name: List build outputs
-        run: ls -laR build || true
-
-      # Assemble publishable site in site/
+      # Assemble site/ for Pages
       - name: Prepare site
         run: |
-          rm -rf site
-          mkdir -p site/diagrams
-          if [ -d build ]; then cp -r build/. site/; fi
-          if ls diagrams/*.svg >/dev/null 2>&1; then cp diagrams/*.svg site/diagrams/; fi
-          if [ -f site/slides.html ]; then cp site/slides.html site/index.html; fi
+          cp -r build/. site/ || true
+          if ls diagrams/*.svg >/dev/null 2>&1; then
+            mkdir -p site/diagrams
+            cp diagrams/*.svg site/diagrams/
+          fi
+          # Make index.html
+          if [ -f site/slides.html ]; then
+            cp site/slides.html site/index.html
+          else
+            echo '<h1>No slides.html found</h1>' > site/index.html
+          fi
+          echo "Contents of site/:"
+          ls -la site
 
+      # Configure GitHub Pages (sets up the deployment)
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # Upload artifact for Pages
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
