@@ -1,4 +1,5 @@
 name: Build & Deploy Marp slides
+
 on:
   push:
     branches: [ "main" ]
@@ -19,29 +20,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # PlantUML (SVG) so images embed nicely
+      # Install PlantUML + Graphviz
       - name: Install Graphviz & PlantUML
         run: |
           sudo apt-get update
           sudo apt-get install -y graphviz plantuml
+
+      # Render all .puml files as SVG
+      - name: Render PlantUML
+        run: |
           mkdir -p diagrams
           plantuml -tsvg diagrams/*.puml || true
 
-      # Marp build (uses .marprc-ci.yml)
+      # Build slides with Marp (output into build/)
       - name: Convert Markdown into HTML and PDF
         uses: KoharaKazuya/marp-cli-action@v4
         with:
           config-file: ./.marprc-ci.yml
           generate-html: true
           generate-pdf: true
+          output: build
 
-      # Ensure diagrams are published with the HTML
+      # Assemble final site in dist/
       - name: Prepare site
         run: |
+          rm -rf dist
           mkdir -p dist/diagrams
+          cp -r build/* dist/ || true
           cp diagrams/*.svg dist/diagrams/ 2>/dev/null || true
-          # Make index.html the slides
-          if [ -f dist/slides.html ]; then cp dist/slides.html dist/index.html; fi
+          [ -f dist/slides.html ] && cp dist/slides.html dist/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
