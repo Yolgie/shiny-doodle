@@ -6,9 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  # CHANGE THIS if your deck isn't at repo root:
-  # e.g. docs/slides.md or presentations/mytalk.md
-  SLIDES_PATH: slides.md
+  SLIDES_PATH: slides.md   # change if your deck isn't at repo root
 
 permissions:
   contents: read
@@ -25,71 +23,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show repo tree (debug)
-        run: |
-          echo "Repo root:"
-          ls -la
-          echo
-          echo "docs/:"
-          ls -la docs || true
-          echo
-          echo "presentations/:"
-          ls -la presentations || true
+      # Debug: show files so we know SLIDES_PATH is right
+      - run: |
+          echo "Repo root:" && ls -la
+          test -f "$SLIDES_PATH" || (echo "::error ::$SLIDES_PATH not found"; exit 1)
 
-      - name: Verify slide source exists
-        run: |
-          if [ ! -f "$SLIDES_PATH" ]; then
-            echo "::error ::SLIDES_PATH='$SLIDES_PATH' not found. Set env SLIDES_PATH to your Markdown file (e.g. docs/slides.md)."
-            exit 1
-          fi
-
-      # Optional UML rendering (safe no-op if no *.puml)
+      # PlantUML (optional) + Graphviz
       - name: Install Graphviz & PlantUML
         run: |
           sudo apt-get update
           sudo apt-get install -y graphviz plantuml
-      - name: Render PlantUML to SVG
-        run: |
           mkdir -p diagrams
           plantuml -tsvg diagrams/*.puml || true
 
-      - name: Ensure build dir
-        run: mkdir -p build
-
-      - name: Build HTML with Marp
-        uses: KoharaKazuya/marp-cli-action@v4
+      # Marp CLI via Node (runs as current user; no perms issues)
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          args: >-
-            ${{ env.SLIDES_PATH }}
-            --allow-local-files
-            --html
-            -o build/slides.html
+          node-version: 20
 
-      - name: Build PDF with Marp
-        uses: KoharaKazuya/marp-cli-action@v4
-        with:
-          args: >-
-            ${{ env.SLIDES_PATH }}
-            --allow-local-files
-            --pdf
-            -o build/slides.pdf
+      - name: Install Marp CLI
+        run: npm i -g @marp-team/marp-cli
 
-      - name: List build outputs (debug)
-        run: ls -la build || true
-
-      - name: Prepare site
+      - name: Build slides (HTML)
         run: |
+          mkdir -p build
+          marp "$SLIDES_PATH" --allow-local-files --html -o build/slides.html
+
+      - name: Build slides (PDF)
+        run: |
+          # marp installs Chromium via Puppeteer; PDF needs it
+          marp "$SLIDES_PATH" --allow-local-files --pdf -o build/slides.pdf
+
+      - name: Assemble site
+        run: |
+          rm -rf site
           mkdir -p site/diagrams
           cp -r build/. site/
           if ls diagrams/*.svg >/dev/null 2>&1; then cp diagrams/*.svg site/diagrams/; fi
           cp site/slides.html site/index.html
-
-      - name: Sanity check site/
-        run: |
-          echo "site/:"
-          ls -la site
-          test -f site/index.html
-          test -f site/slides.pdf
+          echo "site/ contents:" && ls -la site
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
