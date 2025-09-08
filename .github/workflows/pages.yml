@@ -20,48 +20,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install PlantUML + Graphviz
+      # PlantUML + Graphviz
       - name: Install Graphviz & PlantUML
         run: |
           sudo apt-get update
           sudo apt-get install -y graphviz plantuml
 
-      # Render all .puml files as SVG
+      # Render UML to SVG (safe if none exist)
       - name: Render PlantUML
         run: |
           mkdir -p diagrams
           plantuml -tsvg diagrams/*.puml || true
 
-      # Build slides with Marp (output into build/)
-      - name: Convert Markdown into HTML and PDF
+      # Marp build -> build/  (use args to avoid config surprises)
+      - name: Build slides with Marp
         uses: KoharaKazuya/marp-cli-action@v4
         with:
-          config-file: ./.marprc-ci.yml
-          generate-html: true
-          generate-pdf: true
-          output: build
+          args: >-
+            slides.md
+            --allow-local-files
+            --html
+            --pdf
+            -o build/
 
-      # Assemble final site in dist/
+      # Assemble publishable site in site/
       - name: Prepare site
         run: |
-          rm -rf dist
-          mkdir -p dist/diagrams
-          cp -r build/* dist/ || true
-          cp diagrams/*.svg dist/diagrams/ 2>/dev/null || true
-          [ -f dist/slides.html ] && cp dist/slides.html dist/index.html
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          rm -rf site
+          mkdir -p site/diagrams
+          cp -r build/* site/ || true
+          cp diagrams/*.svg site/diagrams/ 2>/dev/null || true
+          [ -f site/sli]()
